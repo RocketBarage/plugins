@@ -32,23 +32,32 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
   @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
   @SuppressWarnings("unchecked")
   FlutterWebView(
-      final Context context,
-      BinaryMessenger messenger,
-      int id,
-      Map<String, Object> params,
-      View containerView) {
+          final Context context,
+          BinaryMessenger messenger,
+          int id,
+          Map<String, Object> params,
+          final View containerView) {
 
     DisplayListenerProxy displayListenerProxy = new DisplayListenerProxy();
     DisplayManager displayManager =
-        (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
+            (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
     displayListenerProxy.onPreWebViewInitialization(displayManager);
-    webView = new InputAwareWebView(context, containerView);
+
+    Context activityContext = context;
+    Context appContext = context.getApplicationContext();
+    if (appContext instanceof FlutterApplication) {
+      Activity currentActivity = ((FlutterApplication) appContext).getCurrentActivity();
+      if (currentActivity != null) {
+        activityContext = currentActivity;
+      }
+    }
+
+    webView = new InputAwareWebView(activityContext, containerView);
     displayListenerProxy.onPostWebViewInitialization(displayManager);
 
     platformThreadHandler = new Handler(context.getMainLooper());
     // Allow local storage.
     webView.getSettings().setDomStorageEnabled(true);
-    webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
 
     methodChannel = new MethodChannel(messenger, "plugins.flutter.io/webview_" + id);
     methodChannel.setMethodCallHandler(this);
@@ -158,18 +167,6 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
       case "getTitle":
         getTitle(result);
         break;
-      case "scrollTo":
-        scrollTo(methodCall, result);
-        break;
-      case "scrollBy":
-        scrollBy(methodCall, result);
-        break;
-      case "getScrollX":
-        getScrollX(result);
-        break;
-      case "getScrollY":
-        getScrollY(result);
-        break;
       default:
         result.notImplemented();
     }
@@ -266,33 +263,6 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
     result.success(webView.getTitle());
   }
 
-  private void scrollTo(MethodCall methodCall, Result result) {
-    Map<String, Object> request = (Map<String, Object>) methodCall.arguments;
-    int x = (int) request.get("x");
-    int y = (int) request.get("y");
-
-    webView.scrollTo(x, y);
-
-    result.success(null);
-  }
-
-  private void scrollBy(MethodCall methodCall, Result result) {
-    Map<String, Object> request = (Map<String, Object>) methodCall.arguments;
-    int x = (int) request.get("x");
-    int y = (int) request.get("y");
-
-    webView.scrollBy(x, y);
-    result.success(null);
-  }
-
-  private void getScrollX(Result result) {
-    result.success(webView.getScrollX());
-  }
-
-  private void getScrollY(Result result) {
-    result.success(webView.getScrollY());
-  }
-
   private void applySettings(Map<String, Object> settings) {
     for (String key : settings.keySet()) {
       switch (key) {
@@ -311,8 +281,6 @@ public class FlutterWebView implements PlatformView, MethodCallHandler {
           final boolean debuggingEnabled = (boolean) settings.get(key);
 
           webView.setWebContentsDebuggingEnabled(debuggingEnabled);
-          break;
-        case "gestureNavigationEnabled":
           break;
         case "userAgent":
           updateUserAgent((String) settings.get(key));
